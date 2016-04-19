@@ -212,5 +212,77 @@ namespace HyperStairs
             }
             return ents;
         }
+
+        [CommandMethod("P2Sides")]
+        public void testDrawRectangleBySides()
+        {
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+            PromptPointOptions ppo = new PromptPointOptions("\nCenter of the first side: ");
+            PromptPointResult ppr = ed.GetPoint(ppo);
+            if (ppr.Status != PromptStatus.OK) return;
+            Point3d p1 = ppr.Value;
+            ppo = new PromptPointOptions("\nCenter of the seconf side: ");
+            ppo.UseBasePoint = true;
+            ppo.BasePoint = p1;
+            ppo.UseDashedLine = true;
+            ppr = ed.GetPoint(ppo);
+            if (ppr.Status != PromptStatus.OK) return;
+
+            Point3d p2 = ppr.Value;
+            if (p1.X == p2.X || p1.Y == p2.Y)
+            {
+                ed.WriteMessage("\nInvalid coordinate specification");
+                return;
+            }
+            ed.DrawVector(p1, p2, 1, true);
+            PromptDistanceOptions pdo = new PromptDistanceOptions("\nOpposite width: ");
+            pdo.BasePoint = p2;
+            pdo.DefaultValue = 100;
+            pdo.UseDefaultValue = true;
+            PromptDoubleResult pdr = ed.GetDistance(pdo);
+            if (pdr.Status != PromptStatus.OK) return;
+            double leg = p1.DistanceTo(p2);
+            double wid = pdr.Value;
+            ed.WriteMessage("\n\tLength:\t{0:f3}\tWidth:{1:f3}\n", leg, wid);
+            Plane plan = new Plane(Point3d.Origin, Vector3d.ZAxis);
+            double ang = p1.GetVectorTo(p2).AngleOnPlane(plan);
+            Point3dCollection pts = new Point3dCollection();
+            Point3d c1 = PolarPoint(p1, ang - Math.PI/2, wid/2);
+            Point3d c4 = PolarPoint(p1, ang + Math.PI/2, wid/2);
+            Point3d c2 = PolarPoint(c1, ang, leg);
+            Point3d c3 = PolarPoint(c4, ang, leg);
+            pts.Add(c1);
+            pts.Add(c2);
+            pts.Add(c3);
+            pts.Add(c4);
+            Polyline poly = new Polyline();
+            int idx = 0;
+            foreach (Point3d p in pts)
+            {
+                Point2d pp = new Point2d(p.X, p.Y);
+                poly.AddVertexAt(idx, pp, 0, 0, 0);
+                idx += 1;
+            }
+            poly.Closed = true;
+
+            using (Transaction tr = doc.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord btr = (BlockTableRecord) tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                btr.AppendEntity(poly);
+                tr.AddNewlyCreatedDBObject(poly, true);
+                tr.Commit();
+            } //end using transaction
+        }
+
+        // by Tony Tanzillo
+        public static Point3d PolarPoint(Point3d basepoint, double angle, double distance)
+        {
+            return new Point3d(
+                basepoint.X + (distance*Math.Cos(angle)),
+                basepoint.Y + (distance*Math.Sin(angle)),
+                basepoint.Z);
+        }
     }
 }
